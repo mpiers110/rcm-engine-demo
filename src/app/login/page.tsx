@@ -4,7 +4,7 @@
 import React, { useEffect } from 'react'; 
 import { useRouter } from 'next/navigation'; 
 import {Loader2} from 'lucide-react'
-import { LoginForm } from '@/components/legal-compass/login-form';
+import { LoginForm } from '@/components/auth/login-form';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
@@ -16,7 +16,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.push('/dashboard');
+      router.push('/');
     }
   }, [status, router]);
 
