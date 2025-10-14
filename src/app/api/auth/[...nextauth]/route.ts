@@ -23,16 +23,16 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: 'Credentials',
       credentials: {
-        email: { label: 'Email', type: 'email', placeholder: 'user@gov.na' },
+        username: { label: 'Email', type: 'email', placeholder: 'admin@example.com' },
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
         try {
-          if (!credentials?.email || !credentials.password) {
+          if (!credentials?.username || !credentials.password) {
             return null;
           }
 
-          const lowerCaseEmail = credentials.email.toLowerCase();
+          const lowerCaseEmail = credentials.username.toLowerCase();
 
           // 1. proceed with database authentication
           const userFromDb = await prisma.user.findUnique({
@@ -103,7 +103,7 @@ jwt: {
     },
   },
   pages: {
-    signIn: '/',
+    signIn: '/login',
     // error: '/auth/error', // Optionally, define a custom error page
   },
   secret: process.env.NEXTAUTH_SECRET,
