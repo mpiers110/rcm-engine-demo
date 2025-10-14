@@ -1,0 +1,185 @@
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator user {
+  provider = "prisma-user-js"
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model User {
+  id                String           @id @default(cuid())
+  name              String?
+  email             String?          @unique
+  image             String?
+  accounts          Account[]
+  sessions          Session[]
+  password        String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  claims          Claim[]
+  medicalRuleSets MedicalRuleSet[]
+  technicalRuleSets TechnicalRuleSet[]
+}
+
+model Claim {
+  id                 String      @id @default(cuid())
+  claim_id           String      @unique
+  encounter_type     String
+  service_date       DateTime
+  national_id        String
+  member_id          String
+  facility_id        String
+  unique_id          String
+  diagnosis_codes    String
+  service_code       String
+  paid_amount_aed    Float
+  approval_number    String?
+  status             String
+  error_type         String
+  error_explanation  String?
+  recommended_action String?
+  raw_errors         String[]
+  owner              User        @relation(fields: [ownerId], references: [id])
+  ownerId            String
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+}
+
+model MedicalRuleSet {
+  id             String         @id @default(cuid())
+  name           String
+  isActive       Boolean        @default(false)
+  rawText        String
+  createdAt      DateTime       @default(now())
+  owner          User           @relation(fields: [ownerId], references: [id])
+  ownerId        String
+  encounterRules EncounterRule[]
+  facilityRules  FacilityRule[]
+  diagnosisRules DiagnosisRule[]
+  exclusionRules ExclusionRule[]
+}
+
+model EncounterRule {
+  id              String         @id @default(cuid())
+  ruleSet         MedicalRuleSet @relation(fields: [ruleSetId], references: [id])
+  ruleSetId       String
+  encounterType   String
+  services        String[]
+}
+
+model FacilityRule {
+  id           String         @id @default(cuid())
+  ruleSet      MedicalRuleSet @relation(fields: [ruleSetId], references: [id])
+  ruleSetId    String
+  facilityType String
+  services     String[]
+}
+
+model DiagnosisRule {
+  id              String         @id @default(cuid())
+  ruleSet         MedicalRuleSet @relation(fields: [ruleSetId], references: [id])
+  ruleSetId       String
+  code            String
+  diagnosis       String
+  requiredService String
+}
+
+model ExclusionRule {
+  id        String         @id @default(cuid())
+  ruleSet   MedicalRuleSet @relation(fields: [ruleSetId], references: [id])
+  ruleSetId String
+  codeA     String
+  codeB     String
+  rule      String
+}
+
+model TechnicalRuleSet {
+  id                 String               @id @default(cuid())
+  name               String
+  isActive           Boolean              @default(false)
+  rawText            String
+  createdAt          DateTime             @default(now())
+  owner              User                 @relation(fields: [ownerId], references: [id])
+  ownerId            String
+  serviceApprovals   ServiceApprovalRule[]
+  diagnosisApprovals DiagnosisApprovalRule[]
+  thresholdRules     ThresholdRule[]
+  idFormatRules      IdFormatRule[]
+}
+
+model ServiceApprovalRule {
+  id                String           @id @default(cuid())
+  ruleSet           TechnicalRuleSet @relation(fields: [ruleSetId], references: [id])
+  ruleSetId         String
+  serviceCode       String
+  description       String
+  approvalRequired  Boolean
+}
+
+model DiagnosisApprovalRule {
+  id                String           @id @default(cuid())
+  ruleSet           TechnicalRuleSet @relation(fields: [ruleSetId], references: [id])
+  ruleSetId         String
+  diagnosisCode     String
+  diagnosis         String
+  approvalRequired  Boolean
+}
+
+model ThresholdRule {
+  id        String           @id @default(cuid())
+  ruleSet   TechnicalRuleSet @relation(fields: [ruleSetId], references: [id])
+  ruleSetId String
+  field     String
+  currency  String
+  amount    Float
+  condition String
+}
+
+model IdFormatRule {
+  id          String           @id @default(cuid())
+  ruleSet     TechnicalRuleSet @relation(fields: [ruleSetId], references: [id])
+  ruleSetId   String
+  description String
+  pattern     String?
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  timestamp DateTime @default(now())
+  details   String
+  userId    String?
+}
+    
