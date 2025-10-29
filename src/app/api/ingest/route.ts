@@ -1,75 +1,257 @@
-import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { addToAuditLog } from '@/lib/audit-log';
 import { prisma } from '@/lib/prisma';
-import type { ClaimRecord } from '@/lib/types';
-import { parseClaimsExcel } from '@/lib/claims-excel-parser';
+import { NextRequest, NextResponse } from 'next/server';
+import { ExcelClaimInput, CreateClaimInput } from '@/types/claim';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  try {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
   const userId = session.user.id;
+    const body = await request.json();
+    const { claims, medicalRuleId, technicalRuleId } = body;
 
-  try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
-    
-    if (!file) {
-      return NextResponse.json({ success: false, error: 'No file uploaded.' }, { status: 400 });
+    // Validate input
+    if (!claims || !Array.isArray(claims) || claims.length === 0) {
+      return NextResponse.json(
+        { error: 'Claims data is required and must be a non-empty array' },
+        { status: 400 }
+      );
     }
 
-    // Since this is a general ingest, we assume it's for claims. Rules have their own endpoints.
-    const { claims } = await parseClaimsExcel(file);
+    // Fetch active medical rules from database
+    let medicalRules = null;
+    if (medicalRuleId) {
+      medicalRules = await prisma.ruleSet.findUnique({
+        where: { id: medicalRuleId, ownerId: userId, isActive: true, type: 'MEDICAL' }
+      });
+    } else {
+      // Get the most recent active medical rule
+      medicalRules = await prisma.ruleSet.findFirst({
+        where: { isActive: true, ownerId: userId },
+        orderBy: { createdAt: 'desc', type: 'MEDICAL' }
+      });
+    }
 
-    // Batch create claims
-    const claimData = claims.map((claim: ClaimRecord) => ({
-      claim_id: claim.claim_id,
-      encounter_type: claim.encounter_type,
-      service_date: new Date(claim.service_date),
-      national_id: claim.national_id,
-      member_id: claim.member_id,
-      facility_id: claim.facility_id,
-      unique_id: claim.unique_id,
-      diagnosis_codes: claim.diagnosis_codes,
-      service_code: claim.service_code,
-      paid_amount_aed: claim.paid_amount_aed,
-      approval_number: claim.approval_number,
-      // Default values to be updated by validation
-      status: 'Pending',
-      error_type: 'No error',
-      ownerId: userId,
-    }));
-    
-    // Using transaction to delete old claims and add new ones
-    await prisma.$transaction([
-      prisma.claim.deleteMany({ where: { ownerId: userId } }),
-      prisma.claim.createMany({ data: claimData, skipDuplicates: true }),
-    ]);
+    // Fetch active technical rules from database
+    let technicalRules = null;
+    if (technicalRuleId) {
+      technicalRules = await prisma.ruleSet.findUnique({
+        where: { id: technicalRuleId, ownerId: userId, isActive: true, type: 'TECHNICAL' }
+      });
+    } else {
+      // Get the most recent active technical rule
+      technicalRules = await prisma.ruleSet.findFirst({
+        where: { isActive: true, ownerId: userId, type: 'TECHNICAL' },
+        orderBy: { createdAt: 'desc' }
+      });
+    }
 
+    if (!medicalRules && !technicalRules) {
+      return NextResponse.json(
+        { error: 'No active rules found in database. Please upload rules first.' },
+        { status: 404 }
+      );
+    }
+
+    // upload claims data to database
+    const claimsData = await prisma.claim.createManyAndReturn({
+      data: claims.map((claim) => ({
+        claimId: claim.claimId,
+        // encounterType: claim.encounterType,
+        // serviceDate: new Date(claim.serviceDate),
+        // nationalId: claim.nationalId,
+        // memberId: claim.memberId,
+        // facilityId: claim.facilityId,
+        // uniqueId: claim.uniqueId,
+        // diagnosisCodes: claim.diagnosisCodes,
+        // serviceCode: claim.serviceCode,
+        // paidAmount: claim.paidAmount,
+        // approvalNumber: claim.approvalNumber,
+        // status: 'Pending',
+        // errorType: 'No error',
+        ownerId: userId
+      })),
+    })
+    // Add to audit log
     addToAuditLog({
-      action: 'Claims Ingested',
+      action: 'Claims Batch Submitted',
       timestamp: new Date().toISOString(),
-      details: `Successfully parsed and saved ${claims.length} claims from ${file.name}.`,
+      details: `Processed ${claimsData.length} claims`,
       userId,
     });
+
+
 
     return NextResponse.json({
       success: true,
-      message: `Successfully ingested ${claims.length} claims from ${file.name}.`,
-    });
+    }, { status: 200 });
+
   } catch (error: any) {
-    console.error('File ingestion failed:', error);
-    addToAuditLog({
-      action: 'File Ingestion Failed',
-      timestamp: new  Date().toISOString(),
-      details: `Error during file ingestion: ${error.message}`,
-      userId,
-    });
+    console.error('Validation API Error:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'File ingestion failed.' },
+      { error: 'Internal server error', message: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// Transform Excel data to our internal format
+function transformExcelClaim(excelClaim: ExcelClaimInput): CreateClaimInput {
+  // Parse service date from Excel format "MM/DD/YY" to Date object
+  const [month, day, year] = excelClaim.service_date.split('/');
+  const fullYear = `20${year}`; // Convert YY to YYYY
+  const serviceDate = new Date(`${fullYear}-${month}-${day}`);
+  
+  // Parse diagnosis codes from semicolon-separated string to array
+  const diagnosisCodes = excelClaim.diagnosis_codes 
+    ? excelClaim.diagnosis_codes.split(';').map(code => code.trim())
+    : [];
+  
+  // Convert paid amount to number
+  const paidAmount = typeof excelClaim.paid_amount_aed === 'string' 
+    ? parseFloat(excelClaim.paid_amount_aed) 
+    : excelClaim.paid_amount_aed;
+
+  return {
+    encounterType: excelClaim.encounter_type,
+    serviceDate: serviceDate,
+    nationalId: excelClaim.national_id,
+    memberId: excelClaim.member_id,
+    facilityId: excelClaim.facility_id,
+    uniqueId: excelClaim.unique_id,
+    diagnosisCodes: diagnosisCodes,
+    approvalNumber: excelClaim.approval_number,
+    serviceCode: excelClaim.service_code,
+    paidAmount: paidAmount
+  };
+}
+
+// Generate unique claim number
+function generateClaimNumber(index: number): string {
+  const timestamp = new Date().getTime();
+  return `CLM-${timestamp}-${String(index + 1).padStart(4, '0')}`;
+}
+
+// Utility function to validate claim (commented as requested)
+async function validateClaim(
+  claimData: CreateClaimInput,
+  technicalRule: any,
+  medicalRule: any
+): Promise<any> {
+  const validationResult = {
+    isValid: true,
+    requiresApproval: false,
+    errors: [] as string[],
+    warnings: [] as string[],
+    approvalReasons: [] as string[],
+    technicalValidation: {
+      idFormatValid: true,
+      idFormatErrors: [] as string[],
+      serviceApprovalRequired: false,
+      diagnosisApprovalRequired: false,
+      amountApprovalRequired: false,
+      approvedServices: [] as string[],
+      approvedDiagnoses: [] as string[]
+    },
+    medicalValidation: {
+      encounterTypeValid: true,
+      facilityTypeValid: true,
+      diagnosisRequirementsMet: true,
+      noMutuallyExclusiveDiagnoses: true,
+      mutuallyExclusiveErrors: [] as string[],
+      facilityServiceErrors: [] as string[],
+      diagnosisServiceErrors: [] as string[]
+    }
+  };
+
+  // TODO: Implement validation logic based on your rules
+  
+  // Example placeholder validations:
+  
+  // Technical validations
+  // if (claimData.paidAmount > technicalRule.technicalRule?.paidAmountThreshold?.threshold) {
+  //   validationResult.requiresApproval = true;
+  //   validationResult.technicalValidation.amountApprovalRequired = true;
+  //   validationResult.approvalReasons.push(`Amount exceeds threshold: ${claimData.paidAmount} > ${technicalRule.technicalRule?.paidAmountThreshold?.threshold}`);
+  // }
+  
+  // Check service approval requirements
+  // const serviceApproval = technicalRule.technicalRule?.serviceApprovals?.find(
+  //   (s: any) => s.serviceID === claimData.serviceCode
+  // );
+  // if (serviceApproval?.approvalRequired) {
+  //   validationResult.requiresApproval = true;
+  //   validationResult.technicalValidation.serviceApprovalRequired = true;
+  //   validationResult.approvalReasons.push(`Service ${claimData.serviceCode} requires approval`);
+  // }
+  
+  // Medical validations
+  // Check if service is allowed for encounter type
+  // Check if facility is authorized for service
+  // Check diagnosis requirements
+  // Check mutually exclusive diagnoses
+
+  return validationResult;
+}
+
+// GET - Get claims for current user (supports filtering)
+export async function GET(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const status = searchParams.get('status');
+    const serviceCode = searchParams.get('serviceCode');
+    const facilityId = searchParams.get('facilityId');
+    
+    const skip = (page - 1) * limit;
+
+    const whereClause: any = {
+      ownerId: session.user.id
+    };
+
+    if (status) whereClause.status = status;
+    if (serviceCode) whereClause.serviceCode = serviceCode;
+    if (facilityId) whereClause.facilityId = facilityId;
+
+    const [claims, total] = await Promise.all([
+      prisma.claim.findMany({
+        where: whereClause,
+        orderBy: {
+          createdAt: 'desc'
+        },
+        skip,
+        take: limit
+      }),
+      prisma.claim.count({
+        where: whereClause
+      })
+    ]);
+
+    return NextResponse.json({
+      data: claims,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching claims:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch claims' },
       { status: 500 }
     );
   }

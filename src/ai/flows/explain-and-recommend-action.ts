@@ -13,8 +13,29 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const ExplainAndRecommendActionInputSchema = z.object({
-  claimData: z.string().describe('The claim data.'),
+  claimData: z.array(z.object({
+    status: z.string(),
+    encounterType: z.string(),
+    serviceDate: z.string(),
+    diagnosisCodes: z.array(z.string()).nullable().default([]),
+    approvalNumber: z.string(),
+        serviceCode: z.string(),
+        paidAmount: z.number(),
+        validationResult: z.object({
+          isValid: z.boolean(),
+          errors: z.array(z.string()),
+        }).optional(),
+        facilityId: z.string(),
+         claimNumber: z.string(),
+         errors: z.array(z.object({
+  type: z.string(),
+          category: z.string(),
+          message: z.string(),
+          action: z.string()
+         })),
   errorType: z.string().describe('The type of error encountered.'),
+
+  })).describe('The claim data.'),
   adjudicationRules: z
     .string()
     .describe('The extracted adjudication rules in JSON format.'),

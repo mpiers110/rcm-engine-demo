@@ -1,4 +1,5 @@
-export type ClaimStatus = 'Validated' | 'Not validated' | 'Pending';
+import { ClaimStatus } from "@/types/claim";
+
 export type ErrorType = 'No error' | 'Medical error' | 'Technical error' | 'both';
 
 export interface Claim {

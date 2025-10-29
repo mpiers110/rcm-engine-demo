@@ -1,8 +1,9 @@
+import {ClaimStatus as PrismaClaimStatus} from '@prisma/client';
 export interface Claim {
   id: string;
   claimNumber?: string; // Not in Excel, but we'll generate it
   encounterType: string;
-  serviceDate: Date;
+  serviceDate: string;
   nationalId: string;
   memberId: string;
   facilityId: string;
@@ -11,9 +12,9 @@ export interface Claim {
   approvalNumber: string;
   serviceCode: string;
   paidAmount: number;
-  status: ClaimStatus;
-  createdAt: Date;
-  updatedAt: Date;
+  status: PrismaClaimStatus;
+  createdAt: string;
+  updatedAt: string;
   ownerId: string;
   validationResult?: ValidationResult;
   [key: string]: any;

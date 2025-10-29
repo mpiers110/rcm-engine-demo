@@ -2,6 +2,30 @@ import { MedicalRule, EncounterType, FacilityType, FacilityRegistry, DiagnosisRe
 import { ServiceApproval, TechnicalRule, IdFormattingRules, DiagnosisApproval, PaidAmountThreshold } from "@/types/technical-rule";
 import { Claim } from "@/types/claim";
 
+export interface Result {
+    status: string;
+    errorType: string;
+    errors: MedicalError[];
+    errorCount: number;
+    explanation: string;
+    recommendedAction: string;
+    id: string;
+    claimNumber?: string;
+    encounterType: string;
+    serviceDate: string;
+    nationalId: string;
+    memberId: string;
+    facilityId: string;
+    uniqueId: string;
+    diagnosisCodes: string[];
+    approvalNumber: string;
+    serviceCode: string;
+    paidAmount: number;
+    createdAt: string;
+    updatedAt: string;
+    ownerId: string;
+    validationResult?: { isValid: boolean; errors: string[]; };
+}
 /**
  * Main validation engine that validates claims against medical and technical rules
  * @param {Array} claimsData - Array of claim objects
@@ -14,7 +38,7 @@ export const validateClaims = (claimsData: Claim[], medicalRules: MedicalRule, t
     throw new Error('Claims data is required');
   }
 
-  const results = claimsData.map((claim) => validateSingleClaim(claim, medicalRules, technicalRules));
+  const results: Array<Result> = claimsData.map((claim) => validateSingleClaim(claim, medicalRules, technicalRules));
   
   return {
     results,
@@ -32,22 +56,18 @@ const validateSingleClaim = (claim: Claim, medicalRules: MedicalRule, technicalR
   let technicalError = false;
 
   // Medical validations
-  if (medicalRules) {
     const medicalErrors = runMedicalValidations(claim, medicalRules);
     if (medicalErrors.length > 0) {
       medicalError = true;
       errors.push(...medicalErrors);
     }
-  }
 
   // Technical validations
-  if (technicalRules) {
     const techErrors = runTechnicalValidations(claim, technicalRules);
     if (techErrors.length > 0) {
       technicalError = true;
       errors.push(...techErrors);
     }
-  }
 
   const errorType = medicalError && technicalError ? 'Both' : 
                    medicalError ? 'Medical Error' : 
@@ -98,31 +118,31 @@ const runMedicalValidations = (claim: Claim, medicalRules: MedicalRule) => {
 /**
  * Validate encounter type rules
  */
-const validateEncounterType = (claim: Claim, encounterTypes: EncounterType) => {
+const validateEncounterType = (claim: Claim, encounterTypes: EncounterType[] | undefined) => {
   const errors: MedicalError[] = [];
   
   if (!encounterTypes) return errors;
 
   const encounterType = claim.encounterType?.toUpperCase();
   
-  if (encounterType === 'INPATIENT' && encounterTypes.inpatient) {
-    const allowedServices = encounterTypes.inpatient.map(s => s.code);
+  if (encounterType === 'INPATIENT') {
+    const allowedServices = encounterTypes.map(s => s.type === 'INPATIENT' ? s.code : '').filter(Boolean);
     if (!allowedServices.includes(claim.serviceCode)) {
       errors.push({
         type: 'Medical',
         category: 'Encounter Type Mismatch',
         message: `Service ${claim.serviceCode} is not allowed for INPATIENT encounters. Allowed: ${allowedServices.join(', ')}`,
-        action: 'Change service code to an inpatient-allowed service or update encounter type to OUTPATIENT'
+        action: 'Add a Patient of encounter type OUTPATIENT'
       });
     }
-  } else if (encounterType === 'OUTPATIENT' && encounterTypes.outpatient) {
-    const allowedServices = encounterTypes.outpatient.map(s => s.code);
+  } else if (encounterType === 'OUTPATIENT') {
+    const allowedServices = encounterTypes.map(s => s.type === 'OUTPATIENT' ? s.code : '').filter(Boolean);
     if (!allowedServices.includes(claim.serviceCode)) {
       errors.push({
         type: 'Medical',
         category: 'Encounter Type Mismatch',
         message: `Service ${claim.serviceCode} is not allowed for OUTPATIENT encounters. Allowed: ${allowedServices.join(', ')}`,
-        action: 'Change service code to an outpatient-allowed service or update encounter type to INPATIENT'
+        action: 'Add a Patient of encounter type INPATIENT'
       });
     }
   }
@@ -133,7 +153,7 @@ const validateEncounterType = (claim: Claim, encounterTypes: EncounterType) => {
 /**
  * Validate facility type rules
  */
-const validateFacilityType = (claim: Claim, facilityTypes: FacilityType[], facilityRegistry: FacilityRegistry[]) => {
+const validateFacilityType = (claim: Claim, facilityTypes: FacilityType[], facilityRegistry: FacilityRegistry[] | undefined) => {
   const errors: MedicalError[] = [];
   
   if (!facilityRegistry) return errors;
@@ -431,27 +451,4 @@ const generateChartData = (results: any) => {
     amountData,
     categoryData
   };
-};
-
-/**
- * Export results to downloadable format
- */
-export const formatResultsForExport = (results: any) => {
-  return results.map((r: any) => ({
-    uniqueId: r.uniqueId,
-    encounter_type: r.encounter_type,
-    serviceDate: r.serviceDate,
-    nationalId: r.nationalId,
-    memberId: r.memberId,
-    facilityId: r.facilityId,
-    diagnosisCodes: r.diagnosisCodes,
-    approvalNumber: r.approvalNumber,
-    serviceCode: r.serviceCode,
-    paidAmountAed: r.paidAmountAed,
-    status: r.status,
-    error_type: r.errorType,
-    errorCount: r.errorCount,
-    explanation: r.explanation,
-    recommendedAction: r.recommendedAction
-  }));
 };

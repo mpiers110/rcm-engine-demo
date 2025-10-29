@@ -5,8 +5,8 @@ export interface TechnicalRuleSet {
   type: 'TECHNICAL';
   isActive: boolean;
   ownerId: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
   
   technicalRule?: TechnicalRule;
 }
@@ -22,10 +22,10 @@ export interface TechnicalRule {
   createdAt?: Date;
   updatedAt?: Date;
   
-  serviceApprovals: ServiceApproval[];
-  diagnosisApprovals: DiagnosisApproval[];
-  paidAmountThreshold: PaidAmountThreshold;
-  idFormattingRules: IdFormattingRules;
+  serviceApprovals?: ServiceApproval[];
+  diagnosisApprovals?: DiagnosisApproval[];
+  paidAmountThreshold?: PaidAmountThreshold;
+  idFormattingRules?: IdFormattingRules;
 }
 
 export interface ServiceApproval {

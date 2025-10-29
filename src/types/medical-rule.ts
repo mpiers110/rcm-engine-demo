@@ -21,29 +21,21 @@ export interface MedicalRule {
   createdAt?: Date;
   updatedAt?: Date;
   
-  encounterTypes: EncounterType;
-  facilityTypes: FacilityType[];
-  facilityRegistry: FacilityRegistry[];
-  diagnosisRequirements: DiagnosisRequirement[];
-  mutuallyExclusiveDiagnoses: MutuallyExclusiveDiagnosis[];
+  encounterTypes?: EncounterType[];
+  facilityTypes?: FacilityType[];
+  facilityRegistry?: FacilityRegistry[];
+  diagnosisRequirements?: DiagnosisRequirement[];
+  mutuallyExclusiveDiagnoses?: MutuallyExclusiveDiagnosis[];
 }
 
 export interface EncounterType {
-  inpatient: {
   id?: string;
   medicalRuleId?: string;
+  type: string;
   code: string;
   description: string;
   createdAt?: Date;
-  }[];
-  outpatient: {
-  id?: string;
-  medicalRuleId?: string;
-  code: string;
-  description: string;
-  createdAt?: Date;
-  }[]
-}
+  }
 
 export interface FacilityType {
   id?: string;

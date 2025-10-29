@@ -5,7 +5,7 @@ export const parseExtractedText = (text: string) => {
       title: '',
       framing: '',
       type: 'MEDICAL',
-      encounterTypes: { inpatient: [], outpatient: [] },
+      encounterTypes: [],
       facilityTypes: [],
       facilityRegistry: [],
       diagnosisRequirements: [],
@@ -38,7 +38,8 @@ export const parseExtractedText = (text: string) => {
     const serviceMatches = inpatientText.matchAll(/•?\s*(SRV\d{4})\s+([^\n•]+)/g);
     
     for (const match of serviceMatches) {
-      data.encounterTypes.inpatient.push({
+      data.encounterTypes?.push({
+        type: 'INPATIENT',
         code: match[1],
         description: match[2].trim()
       });
@@ -51,7 +52,8 @@ export const parseExtractedText = (text: string) => {
     const serviceMatches = outpatientText.matchAll(/•?\s*(SRV\d{4})\s+([^\n•]+)/g);
     
     for (const match of serviceMatches) {
-        data.encounterTypes.outpatient.push({
+        data.encounterTypes?.push({
+            type: 'OUTPATIENT',
             code: match[1],
             description: match[2].trim()
           });
@@ -80,14 +82,14 @@ export const parseExtractedText = (text: string) => {
 
     // Convert map to array
     facilityMap.forEach((services, facilityType) => {
-      data.facilityTypes.push({
+      data.facilityTypes?.push({
         facilityType: facilityType,
         allowedServices: [...new Set(services)].sort() as string[]
       });
     });
 
     // Alternative parsing for facility types if above didn't work
-    if (data.facilityTypes.length === 0) {
+    if (data.facilityTypes?.length === 0) {
       const facilitySection = text.match(/B\.\s*Services limited by Facility Type(.*?)(?=Facility Registry|$)/is);
       if (facilitySection) {
         const lines = facilitySection[1].split('\n');
@@ -100,7 +102,7 @@ export const parseExtractedText = (text: string) => {
 
           if (facilityMatch && serviceMatch) {
             if (currentFacility) {
-              data.facilityTypes.push({
+              data.facilityTypes?.push({
                 facilityType: currentFacility,
                 allowedServices: [...new Set(currentServices)].sort() as string[]
               });
@@ -130,7 +132,7 @@ export const parseExtractedText = (text: string) => {
       
       // Filter out false matches (like SRV codes or other non-facility IDs)
       if (!id.startsWith('SRV') && type.length > 3 && id.length >= 6) {
-        data.facilityRegistry.push({
+        data.facilityRegistry?.push({
           id: id,
           type: type
         });
@@ -138,14 +140,14 @@ export const parseExtractedText = (text: string) => {
     }
 
     // Alternative registry parsing
-    if (data.facilityRegistry.length === 0) {
+    if (data.facilityRegistry?.length === 0) {
       const registrySection = text.match(/Facility Registry.*?present in claims\)(.*?)$/is);
       if (registrySection) {
         const lines = registrySection[1].split('\n');
         lines.forEach(line => {
           const match = line.match(/([A-Z0-9]{6,10})\s+([A-Z_]+)/);
           if (match && !match[1].startsWith('SRV')) {
-            data.facilityRegistry.push({
+            data.facilityRegistry?.push({
               id: match[1],
               type: match[2].replace(/_/g, ' ')
             });
@@ -163,7 +165,7 @@ export const parseExtractedText = (text: string) => {
   const diagnosisMatches = sectionCContent.matchAll(/•?\s*([A-Z]\d{2}(?:\.\d+)?)\s+([^:]+):\s*(SRV\d{4})\s+([^\n•]+)/g);
   
   for (const match of diagnosisMatches) {
-    data.diagnosisRequirements.push({
+    data.diagnosisRequirements?.push({
       diagnosisCode: match[1],
       diagnosisName: match[2].trim(),
       serviceID: match[3],
@@ -183,7 +185,7 @@ export const parseExtractedText = (text: string) => {
   const exclusionMatches = sectionDContent.matchAll(/•?\s*([A-Z]\d{2}(?:\.\d+)?)\s+([^c]+?)\s+cannot coexist with\s+([A-Z]\d{2}(?:\.\d+)?)\s+([^\n•]+)/gi);
   
   for (const match of exclusionMatches) {
-    data.mutuallyExclusiveDiagnoses.push({
+    data.mutuallyExclusiveDiagnoses?.push({
       diagnosis1Code: match[1],
       diagnosis1Name: match[2].trim(),
       diagnosis2Code: match[3],
