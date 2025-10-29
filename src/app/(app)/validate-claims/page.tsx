@@ -9,6 +9,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { toast } from '@/hooks/use-toast';
 import { Result } from '@/lib/extract';
 import { useSession } from 'next-auth/react';
+import { Card, CardDescription } from '@/components/ui/card';
 
 const ClaimsValidationEngine = () => {
   const {data: session} = useSession();
@@ -344,15 +345,19 @@ const ClaimsValidationEngine = () => {
             </div>
           </TabsContent>
           <TabsContent value="llm">
-            
-                        {validationResults.aiRecommendation && (<div>
-                        <p className="px-4 py-3 text-sm text-gray-700 whitespace-pre-line max-w-md">
+            <div className="bg-white rounded-lg shadow-xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-800">Validation Results</h2>
+              </div>
+                        {validationResults.aiRecommendation && (<Card>
+                        <CardDescription className="px-4 py-3 text-sm text-gray-700 whitespace-pre-line max-w-md">
                           {validationResults.aiRecommendation.errorExplanation}
-                        </p>
-                        <p className="px-4 py-3 text-sm text-gray-700 max-w-md">
+                        </CardDescription>
+                        <CardDescription className="px-4 py-3 text-sm text-gray-700 max-w-md">
                           {validationResults.aiRecommendation.recommendedAction}
-                        </p>
-                        </div>)}
+                        </CardDescription>
+                        </Card>)}
+            </div>
           </TabsContent>
         </Tabs>
 
