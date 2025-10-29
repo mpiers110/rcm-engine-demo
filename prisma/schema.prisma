@@ -54,24 +54,24 @@ model User {
 
 model Claim {
   id                 String      @id @default(cuid())
-  claimId  String     @unique
-  patientId    String     @map("patient_id")
-  memberId     String     @map("member_id")
-  facilityId   String     @map("facility_id")
+  claimId  String?     @unique
+  patientId    String?     @map("patient_id")
+  memberId     String?     @map("member_id")
+  facilityId   String?     @map("facility_id")
   nationalId   String     @map("national_id")
   uniqueId     String
   serviceCode  String     @map("service_code")
   diagnosisCodes String[] @map("diagnosis_codes")
   paidAmount   Float      @map("paid_amount")
   encounterType String    @map("encounter_type")
-  claimDate    DateTime   @map("claim_date")
+  claimDate    DateTime?   @map("claim_date")
   status       ClaimStatus @default(PENDING)
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
   ownerId      String     @map("owner_id")
   serviceDate       DateTime
   approvalNumber    String?
-  errorType         String
+  errorType         String?
   errorExplanation  String?
   recommendedAction String?
   rawErrors         Json[]

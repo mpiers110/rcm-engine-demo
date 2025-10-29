@@ -1,15 +1,18 @@
 "use client";
-import { useState, useTransition, useCallback, useEffect } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { XCircle, FileText, BarChart3 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { FileUp, BookCheck, Wrench, Loader2, BrainCircuit, FileJson, CheckCircle } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { Loader2, BrainCircuit, FileJson, CheckCircle } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { toast } from '@/hooks/use-toast';
 import { Result } from '@/lib/extract';
+import { useSession } from 'next-auth/react';
 
 const ClaimsValidationEngine = () => {
+  const {data: session} = useSession();
+  const currentUser = session?.user;
   const [isParsing, startTransition] = useTransition();
   const [medicalRules, setMedicalRules] = useState<any>(null);
   const [technicalRules, setTechnicalRules] = useState<any>(null);
@@ -59,10 +62,10 @@ const ClaimsValidationEngine = () => {
 
   const fetchMedicalRules = async () => {
       try {
-    const file = await fetch('/api/medical-rules', { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+    const file = await fetch(`/api/rules/medical?ownerId=${currentUser?.id}`, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
     const data = await file.json();
     if (data) {
-        setMedicalRules(data);
+        setMedicalRules(data.rules);
     }
       } catch (error) {
         console.error('Error parsing medical rules:', error);
@@ -71,10 +74,10 @@ const ClaimsValidationEngine = () => {
 
   const fetchTechnicalRules = async () => {
       try {
-    const file = await fetch('/api/technical-rules', { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+    const file = await fetch(`/api/rules/technical?ownerId=${currentUser?.id}`, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
     const data = await file.json();
     if (data) {
-        setTechnicalRules(data);
+        setTechnicalRules(data.rules);
     }
       } catch (error) {
         console.error('Error parsing technical rules:', error);
@@ -86,8 +89,26 @@ const ClaimsValidationEngine = () => {
     if (file) {
       try {
         const data = await parseExcel(file);
+        const saveToDb = await fetch('/api/ingest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ claims: data }),
+        });
+        const saveToDbData = await saveToDb.json();
+        if (!saveToDbData.success) {
+          throw new Error(saveToDbData.error);
+        }
+        toast({
+          title: 'Claims Ingested',
+          description: 'Claims ingested successfully',
+        })
         setClaimsData(data);
       } catch (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Error Parsing Claims',
+          description: 'Failed to parse claims',
+        })
         console.error('Error parsing claims:', error);
       }
     }
@@ -137,7 +158,7 @@ const ClaimsValidationEngine = () => {
   useEffect(() => {
     fetchTechnicalRules();
     fetchMedicalRules();
-  }, []);
+  }, [currentUser]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
@@ -153,14 +174,14 @@ const ClaimsValidationEngine = () => {
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Medical Rules
               </label>
-              {medicalRules && <p className="text-xs text-green-600 mt-1">✓ Loaded</p>}
+              {medicalRules ? <p className="text-xs text-green-600 mt-1">✓ Loaded</p> : <Loader2 />}
             </div>
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Technical Rules
               </label>
-              {technicalRules && <p className="text-xs text-green-600 mt-1">✓ Loaded</p>}
+              {technicalRules ? <p className="text-xs text-green-600 mt-1">✓ Loaded</p> : <Loader2 />}
             </div>
 
             <div>
@@ -181,7 +202,8 @@ const ClaimsValidationEngine = () => {
           <div className="flex flex-col md:flex-row justify-end items-center gap-4 rounded-lg border p-4">
           <Button
             onClick={() => handleValidate('rules')}
-            disabled={(!claimsData && !medicalRules && !technicalRules) || loading}
+            disabled={(!claimsData || !medicalRules || !technicalRules) || loading}
+            
             size="lg"
             className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
@@ -191,7 +213,7 @@ const ClaimsValidationEngine = () => {
           </Button>
           <Button
             onClick={() => handleValidate('llm')}
-            disabled={(!claimsData && !medicalRules && !technicalRules) || loading}
+            disabled={(!claimsData || !medicalRules || !technicalRules) || loading}
             size="lg"
             className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
@@ -201,6 +223,13 @@ const ClaimsValidationEngine = () => {
           </Button>
         </div>
         </div>
+        
+          {loading && (
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+              <p className="mt-4 text-gray-600">Validating claims...</p>
+            </div>
+          )}
 
         {validationResults && (
           <>
@@ -246,6 +275,18 @@ const ClaimsValidationEngine = () => {
               </div>)}
             </div>
 
+            <Tabs defaultValue="rule">
+          <TabsList className="grid w-full grid-cols-2 md:w-auto md:inline-flex">
+            <TabsTrigger value="rule">
+              <BarChart className="mr-2 h-4 w-4" />
+              Rule-Based
+            </TabsTrigger>
+            <TabsTrigger value="llm">
+              <BrainCircuit className="mr-2 h-4 w-4" />
+              LLM-Based
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="rule">
             <div className="bg-white rounded-lg shadow-xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-gray-800">Validation Results</h2>
@@ -260,10 +301,6 @@ const ClaimsValidationEngine = () => {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Error Type</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Explanation</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Recommended Action</th>
-                      {validationResults.aiRecommendation && (<>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">AI Explanation</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">AI Recommended Action</th>
-                      </>)}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -301,18 +338,25 @@ const ClaimsValidationEngine = () => {
                         </td>
                       </tr>
                     ))}
-                        {validationResults.aiRecommendation && (<tr>
-                        <td className="px-4 py-3 text-sm text-gray-700 whitespace-pre-line max-w-md">
-                          {validationResults.aiRecommendation.errorExplanation}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 max-w-md">
-                          {validationResults.aiRecommendation.recommendedAction}
-                        </td>
-                        </tr>)}
                   </tbody>
                 </table>
               </div>
             </div>
+          </TabsContent>
+          <TabsContent value="llm">
+            
+                        {validationResults.aiRecommendation && (<div>
+                        <p className="px-4 py-3 text-sm text-gray-700 whitespace-pre-line max-w-md">
+                          {validationResults.aiRecommendation.errorExplanation}
+                        </p>
+                        <p className="px-4 py-3 text-sm text-gray-700 max-w-md">
+                          {validationResults.aiRecommendation.recommendedAction}
+                        </p>
+                        </div>)}
+          </TabsContent>
+        </Tabs>
+
+
           </>
         )}
       </div>

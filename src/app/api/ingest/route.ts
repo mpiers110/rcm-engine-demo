@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   }
   const userId = session.user.id;
     const body = await request.json();
-    const { claims, medicalRuleId, technicalRuleId } = body;
+    const { claims } = body;
 
     // Validate input
     if (!claims || !Array.isArray(claims) || claims.length === 0) {
@@ -23,57 +23,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch active medical rules from database
-    let medicalRules = null;
-    if (medicalRuleId) {
-      medicalRules = await prisma.ruleSet.findUnique({
-        where: { id: medicalRuleId, ownerId: userId, isActive: true, type: 'MEDICAL' }
-      });
-    } else {
-      // Get the most recent active medical rule
-      medicalRules = await prisma.ruleSet.findFirst({
-        where: { isActive: true, ownerId: userId },
-        orderBy: { createdAt: 'desc', type: 'MEDICAL' }
-      });
-    }
-
-    // Fetch active technical rules from database
-    let technicalRules = null;
-    if (technicalRuleId) {
-      technicalRules = await prisma.ruleSet.findUnique({
-        where: { id: technicalRuleId, ownerId: userId, isActive: true, type: 'TECHNICAL' }
-      });
-    } else {
-      // Get the most recent active technical rule
-      technicalRules = await prisma.ruleSet.findFirst({
-        where: { isActive: true, ownerId: userId, type: 'TECHNICAL' },
-        orderBy: { createdAt: 'desc' }
-      });
-    }
-
-    if (!medicalRules && !technicalRules) {
-      return NextResponse.json(
-        { error: 'No active rules found in database. Please upload rules first.' },
-        { status: 404 }
-      );
-    }
 
     // upload claims data to database
     const claimsData = await prisma.claim.createManyAndReturn({
       data: claims.map((claim) => ({
         claimId: claim.claimId,
-        // encounterType: claim.encounterType,
-        // serviceDate: new Date(claim.serviceDate),
-        // nationalId: claim.nationalId,
-        // memberId: claim.memberId,
-        // facilityId: claim.facilityId,
-        // uniqueId: claim.uniqueId,
-        // diagnosisCodes: claim.diagnosisCodes,
-        // serviceCode: claim.serviceCode,
-        // paidAmount: claim.paidAmount,
-        // approvalNumber: claim.approvalNumber,
-        // status: 'Pending',
-        // errorType: 'No error',
+        encounterType: claim.encounter_type,
+        serviceDate: new Date(claim.service_date),
+        nationalId: claim.national_id,
+        memberId: claim.member_id,
+        facilityId: claim.facilityId,
+        uniqueId: claim.unique_id,
+        diagnosisCodes: [claim.diagnosis_codes],
+        serviceCode: claim.service_code,
+        paidAmount: claim.paid_amount_aed,
+        approvalNumber: claim.approvalNumber,
         ownerId: userId
       })),
     })

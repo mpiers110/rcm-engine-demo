@@ -75,7 +75,8 @@ const validateSingleClaim = (claim: Claim, medicalRules: MedicalRule, technicalR
 
   return {
     ...claim,
-    status: errors.length === 0 ? 'Validated' : 'Not Validated',
+    // status: errors.length === 0 ? 'Validated' : 'Not Validated',
+    validationResult: { isValid: errors.length === 0, errors: errors.map(e => e.message) },
     errorType,
     errors,
     errorCount: errors.length,

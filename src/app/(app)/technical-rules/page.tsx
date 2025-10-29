@@ -4,9 +4,10 @@ import { FileText, Upload, Download, CheckCircle, AlertCircle } from 'lucide-rea
 import pdfToText from 'react-pdftotext';
 import { parseTechnicalRules } from '@/lib/technical-parser';
 import { toast } from '@/hooks/use-toast';
+import { TechnicalRule } from '@/types/technical-rule';
 
 const TechnicalRulesExtractor = () => {
-  const [extractedData, setExtractedData] = useState<any>(null);
+  const [extractedData, setExtractedData] = useState<Omit<TechnicalRule, 'id' | 'isActive' | 'ownerId' | 'ruleSetId'> | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<any>(null);
 
@@ -128,10 +129,10 @@ const TechnicalRulesExtractor = () => {
 
                 <div className="space-y-6">
                   {/* Section 1: Services Requiring Approval */}
-                  {extractedData.servicesRequiringApproval.length > 0 ? (
+                  {extractedData.serviceApprovals && extractedData.serviceApprovals.length > 0 ? (
                     <div>
                       <h3 className="text-lg font-semibold text-gray-800 mb-3">
-                        1) Services Requiring Prior Approval ({extractedData.servicesRequiringApproval.length})
+                        1) Services Requiring Prior Approval ({extractedData.serviceApprovals.length})
                       </h3>
                       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -143,7 +144,7 @@ const TechnicalRulesExtractor = () => {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200">
-                            {extractedData.servicesRequiringApproval.map((item: any, idx: number) => (
+                            {extractedData.serviceApprovals.map((item: any, idx: number) => (
                               <tr key={idx} className="hover:bg-gray-50">
                                 <td className="px-4 py-3 text-sm font-mono text-purple-600">{item.serviceID}</td>
                                 <td className="px-4 py-3 text-sm text-gray-700">{item.description}</td>
@@ -171,10 +172,10 @@ const TechnicalRulesExtractor = () => {
                   )}
 
                   {/* Section 2: Diagnosis Codes Requiring Approval */}
-                  {extractedData.diagnosisCodesRequiringApproval.length > 0 ? (
+                  {extractedData.diagnosisApprovals && extractedData.diagnosisApprovals.length > 0 ? (
                     <div>
                       <h3 className="text-lg font-semibold text-gray-800 mb-3">
-                        2) Diagnosis Codes Requiring Approval ({extractedData.diagnosisCodesRequiringApproval.length})
+                        2) Diagnosis Codes Requiring Approval ({extractedData.diagnosisApprovals.length})
                       </h3>
                       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -186,7 +187,7 @@ const TechnicalRulesExtractor = () => {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200">
-                            {extractedData.diagnosisCodesRequiringApproval.map((item: any, idx: number) => (
+                            {extractedData.diagnosisApprovals.map((item: any, idx: number) => (
                               <tr key={idx} className="hover:bg-gray-50">
                                 <td className="px-4 py-3 text-sm font-mono text-purple-600">{item.code}</td>
                                 <td className="px-4 py-3 text-sm text-gray-700">{item.diagnosis}</td>
@@ -215,7 +216,7 @@ const TechnicalRulesExtractor = () => {
 
                   {/* Section 3: Paid Amount Threshold */}
                   {/* Section 3: Paid Amount Threshold */}
-                  {extractedData.paidAmountThreshold.threshold ? (
+                  {extractedData.paidAmountThreshold?.threshold ? (
                     <div>
                       <h3 className="text-lg font-semibold text-gray-800 mb-3">
                         3) Paid Amount Threshold
@@ -225,7 +226,7 @@ const TechnicalRulesExtractor = () => {
                           <div className="bg-purple-100 rounded-lg px-6 py-4">
                             <div className="text-xs text-purple-600 font-semibold mb-1">THRESHOLD</div>
                             <span className="text-3xl font-bold text-purple-700">
-                              AED {extractedData.paidAmountThreshold.threshold}
+                              AED {extractedData.paidAmountThreshold?.threshold}
                             </span>
                           </div>
                           <div>
@@ -233,13 +234,13 @@ const TechnicalRulesExtractor = () => {
                             <div className="text-xs text-gray-600">When paid amount exceeds threshold</div>
                           </div>
                         </div>
-                        {extractedData.paidAmountThreshold.description && (
+                        {extractedData.paidAmountThreshold?.description && (
                           <div className="bg-amber-50 border-l-4 border-amber-500 p-4">
                             <p className="text-sm text-gray-700">{extractedData.paidAmountThreshold.description}</p>
                           </div>
                         )}
                         <div className="mt-4 text-xs text-gray-500">
-                          <span className="font-semibold">Validation:</span> Check if paid_amount_aed {'>'} {extractedData.paidAmountThreshold.threshold}
+                          <span className="font-semibold">Validation:</span> Check if paid_amount_aed {'>'} {extractedData.paidAmountThreshold?.threshold}
                         </div>
                       </div>
                     </div>
@@ -250,7 +251,7 @@ const TechnicalRulesExtractor = () => {
                   )}
 
                   {/* Section 4: ID & Unique ID Formatting */}
-                  {(extractedData.idFormattingRules.idFormat || extractedData.idFormattingRules.requirements.length > 0) ? (
+                  {(extractedData.idFormattingRules?.idFormat || extractedData.idFormattingRules?.requirements && extractedData.idFormattingRules?.requirements.length > 0) ? (
                     <div>
                       <h3 className="text-lg font-semibold text-gray-800 mb-3">
                         4) ID & Unique ID Formatting

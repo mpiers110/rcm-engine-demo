@@ -2,7 +2,7 @@ import { MedicalRule } from "@/types/medical-rule";
 
 export const parseExtractedText = (text: string) => {
     const data: Omit<MedicalRule, 'id'|'isActive'|'ownerId'> = {
-      title: '',
+      title: 'Medical Adjudication Guide',
       framing: '',
       type: 'MEDICAL',
       encounterTypes: [],
@@ -11,12 +11,6 @@ export const parseExtractedText = (text: string) => {
       diagnosisRequirements: [],
       mutuallyExclusiveDiagnoses: [],
     };
-
-    // Extract title
-    const titleMatch = text.match(/Medical Adjudication Guide[^\n]*/i);
-    if (titleMatch) {
-      data.title = titleMatch[0].trim();
-    }
 
     // Extract framing text - improved to capture full text
     const framingMatch = text.match(/Framing:\s*([^]*?)(?=A\.|Inpatient-only services|Services limited)/i);

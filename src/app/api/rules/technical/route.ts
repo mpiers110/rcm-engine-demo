@@ -17,11 +17,12 @@ export async function POST(request: Request) {
     const {
       title,
       framing,
-      servicesRequiringApproval,
-      diagnosisCodesRequiringApproval,
+      serviceApprovals,
+      diagnosisApprovals,
       paidAmountThreshold,
       idFormattingRules
     } = body
+    
 
     const result = await prisma.$transaction(async (tx) => {
       // Deactivate all other rule sets for this user
@@ -40,14 +41,14 @@ export async function POST(request: Request) {
         technicalRule: {
           create: {
             serviceApprovals: {
-              create: servicesRequiringApproval.map((service: any) => ({
+              create: serviceApprovals.map((service: any) => ({
                 serviceID: service.serviceID,
                 description: service.description,
                 approvalRequired: service.approvalRequired
               }))
             },
             diagnosisApprovals: {
-              create: diagnosisCodesRequiringApproval.map((diagnosis: any) => ({
+              create: diagnosisApprovals.map((diagnosis: any) => ({
                 code: diagnosis.code,
                 diagnosis: diagnosis.diagnosis,
                 approvalRequired: diagnosis.approvalRequired
@@ -137,7 +138,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(technicalRules)
+    return NextResponse.json({rules: technicalRules[0]}, { status: 200 })
   } catch (error) {
     console.error('Error fetching technical rules:', error)
     return NextResponse.json(

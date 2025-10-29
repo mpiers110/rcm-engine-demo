@@ -2,35 +2,26 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { Result, validateClaims } from '@/lib/extract';
-import { explainAndRecommendAction, validateClaimLLM } from '@/ai/flows';
+import { explainAndRecommendAction } from '@/ai/flows';
 import { addToAuditLog } from '@/lib/audit-log';
 import { prisma } from '@/lib/prisma';
 import { TechnicalRuleSet } from '@/types/technical-rule';
 import { MedicalRuleSet } from '@/types/medical-rule';
 import { Claim as ClaimRecord, ValidationResult } from '@/types/claim';
 import { ClaimStatus } from '@prisma/client';
+import { z } from 'genkit';
 
 
 async function getActiveRulesFromDb(userId: string): Promise<{ medicalRules: MedicalRuleSet, technicalRules: TechnicalRuleSet }> {
 
     const activeMedicalRuleSet = await prisma.ruleSet.findFirst({
-        where: { ownerId: userId, isActive: true, type: 'MEDICAL' },
-      include: {
-        medicalRule: {
-          include: {
-            encounterTypes: true,
-            facilityTypes: true,
-            facilityRegistry: true,
-            diagnosisRequirements: true,
-            mutuallyExclusiveDiagnoses: true
-          }
-        }
-      }
-    });
-
+        where: { isActive: true, ownerId: userId, type: 'MEDICAL' },
+        include: { medicalRule: true },
+        orderBy: { createdAt: 'desc' }
+      });
     const activeTechnicalRuleSet = await prisma.ruleSet.findFirst({
-        where: { ownerId: userId, isActive: true, type: 'TECHNICAL' },
-      include: {
+        where: { isActive: true, ownerId: userId, type: 'TECHNICAL' },
+        include: {
         technicalRule: {
           include: {
             serviceApprovals: true,
@@ -39,13 +30,14 @@ async function getActiveRulesFromDb(userId: string): Promise<{ medicalRules: Med
             idFormattingRules: true
           }
         }
-      }
-    });
+      },
+        orderBy: { createdAt: 'desc' }
+      });
+
 
     if (!activeMedicalRuleSet || !activeTechnicalRuleSet) {
         throw new Error('No active rule sets found in the database. Please upload rule files.');
     }
-  
     
     return { medicalRules: {
       ...activeMedicalRuleSet,
@@ -60,13 +52,21 @@ async function getActiveRulesFromDb(userId: string): Promise<{ medicalRules: Med
 
       }
     }, technicalRules: {
-      ...activeTechnicalRuleSet.technicalRule,
-      id: activeTechnicalRuleSet.id,
+      ...activeTechnicalRuleSet,
       type: 'TECHNICAL',
       framing: activeTechnicalRuleSet?.framing ?? '',
-      title: activeTechnicalRuleSet?.title || '',
+      technicalRule: {
+        ...activeTechnicalRuleSet.technicalRule,
+      id: activeTechnicalRuleSet.id,
+      type: 'TECHNICAL',
+      ruleSetId: activeTechnicalRuleSet.technicalRule?.ruleSetId || '',
+      paidAmountThreshold: activeTechnicalRuleSet.technicalRule?.paidAmountThreshold || undefined,
+      idFormattingRules: activeTechnicalRuleSet.technicalRule?.idFormattingRules || undefined,
+      framing: activeTechnicalRuleSet?.framing ?? '',
+      title: activeTechnicalRuleSet?.title ?? '',
       isActive: true,
       ownerId: userId
+      }
     } };
 }
 
@@ -111,7 +111,7 @@ async function processLLMValidation(claims: ClaimRecord[], medicalRules: Medical
       userId,
     })
         const aiRecommendation = await explainAndRecommendAction({
-          claimData: validationResult.results.map((claim) => ({...claim, claimNumber: claim.claimNumber ?? 'NA'})),
+          claimData: JSON.stringify(validationResult.results.map((claim) => ({...claim, claimNumber: claim.claimNumber ?? 'NA'}))),
           adjudicationRules: JSON.stringify({...medicalRules, ...technicalRules}),
         });
         return {
@@ -155,6 +155,8 @@ export async function POST(request: Request) {
     const { medicalRules, technicalRules } = await getActiveRulesFromDb(userId);
     const claimsData = claims.map((claim) => ({...claim, serviceDate: claim.serviceDate.toISOString(), createdAt: claim.createdAt.toISOString(),
       updatedAt: claim.updatedAt.toISOString(),
+      memberId: claim.memberId ?? 'NA',
+      facilityId: claim.facilityId ?? 'NA',
       approvalNumber: claim.approvalNumber ?? 'NA',
       validationResult: claim.validationResult as unknown as ValidationResult | undefined
     }));
@@ -192,13 +194,13 @@ export async function POST(request: Request) {
     );
         await prisma.claim.update({
           where: { claimId: claim.id },
-          data: processedData
-          //   status: claim.status as ClaimStatus,
+          data: {...processedData,
+            status: claim.status as ClaimStatus,
           //   errorType: claim.errorType,
           //   rawErrors: claim.errors || [],
           //   errorExplanation: claim.explanation,
           //   recommendedAction: claim.recommendedAction,
-          // },
+          },
         });
       }
       addToAuditLog({

@@ -2,7 +2,7 @@ import { TechnicalRule } from "@/types/technical-rule";
 
  export const parseTechnicalRules = (text: string) => {
     const data: Omit<TechnicalRule, 'id' | 'isActive' | 'ownerId' | 'ruleSetId'> = {
-      title: '',
+      title: 'Technical Rules',
       framing: '',
       type: 'TECHNICAL',
       serviceApprovals: [],
@@ -44,7 +44,7 @@ import { TechnicalRule } from "@/types/technical-rule";
         const approvalRequired = match[3].toUpperCase() === 'YES';
         
         if (description && description.length > 2) {
-          data.serviceApprovals.push({
+          data.serviceApprovals?.push({
             serviceID,
             description,
             approvalRequired
@@ -67,7 +67,7 @@ import { TechnicalRule } from "@/types/technical-rule";
         const approvalRequired = match[3].toUpperCase() === 'YES';
         
         if (diagnosis && diagnosis.length > 2) {
-          data.diagnosisApprovals.push({
+          data.diagnosisApprovals?.push({
             code,
             diagnosis,
             approvalRequired
@@ -84,20 +84,22 @@ import { TechnicalRule } from "@/types/technical-rule";
       // Extract threshold amount - look for AED followed by number
       const thresholdMatch = content.match(/AED\s*(\d+)/i);
       if (thresholdMatch) {
-        data.paidAmountThreshold.threshold = parseInt(thresholdMatch[1]);
+        if (data.paidAmountThreshold) {
+          data.paidAmountThreshold.threshold = parseInt(thresholdMatch[1]);
+        }
       }
       
       // Extract the main rule description (first sentence)
       const mainRuleMatch = content.match(/Any claim with[^.]+\./i);
       if (mainRuleMatch) {
-        data.paidAmountThreshold.description = mainRuleMatch[0].trim();
+        if (data.paidAmountThreshold) data.paidAmountThreshold.description = mainRuleMatch[0].trim();
       }
       
       // If no main rule found, try to get full content up to next section
-      if (!data.paidAmountThreshold.description) {
+      if (!data.paidAmountThreshold?.description) {
         const fullDescMatch = content.match(/Any claim with.*?(?=\n\n|4\)|$)/is);
         if (fullDescMatch) {
-          data.paidAmountThreshold.description = fullDescMatch[0].trim().replace(/\s+/g, ' ');
+          if (data.paidAmountThreshold) data.paidAmountThreshold.description = fullDescMatch[0].trim().replace(/\s+/g, ' ');
         }
       }
     }
@@ -110,13 +112,13 @@ import { TechnicalRule } from "@/types/technical-rule";
       // Extract ID format requirement
       const idFormatMatch = content.match(/All IDs must be\s+([^.]+)/i);
       if (idFormatMatch) {
-        data.idFormattingRules.idFormat = idFormatMatch[1].trim();
+        if (data.idFormattingRules) data.idFormattingRules.idFormat = idFormatMatch[1].trim();
       }
       
       // Extract unique_id structure with more flexible pattern
       const structureMatch = content.match(/unique[_\s]id structure[:\s]+([^.]+?)(?:\.|•|\n|$)/i);
       if (structureMatch) {
-        data.idFormattingRules.uniqueIdStructure = structureMatch[1].trim();
+        if (data.idFormattingRules) data.idFormattingRules.uniqueIdStructure = structureMatch[1].trim();
       }
       
       // Extract all bullet points as requirements
@@ -124,17 +126,17 @@ import { TechnicalRule } from "@/types/technical-rule";
       for (const match of requirementMatches) {
         const requirement = match[1].trim();
         if (requirement.length > 5) {
-          data.idFormattingRules.requirements.push(requirement);
+          data.idFormattingRules?.requirements.push(requirement);
         }
       }
       
       // If requirements array is empty, try to extract from the combined text
-      if (data.idFormattingRules.requirements.length === 0) {
+      if (data.idFormattingRules?.requirements.length === 0) {
         // Try to extract from section 3 if it was combined
         const combinedIdRules = text.match(/All IDs must be UPPERCASE.*?(?=\n\n|$)/is);
         if (combinedIdRules) {
           const rules = combinedIdRules[0].split(/[.•]/).filter(r => r.trim().length > 10);
-          data.idFormattingRules.requirements = rules.map(r => r.trim());
+          if (data.idFormattingRules) data.idFormattingRules.requirements = rules.map(r => r.trim());
         }
       }
     }

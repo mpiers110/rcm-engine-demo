@@ -44,6 +44,7 @@ export async function POST(request: Request) {
             create: {
               encounterTypes: {
                 create: encounterTypes?.map((encounter: any) => ({
+                  type: encounter.type,
                   code: encounter.code,
                   description: encounter.description
                 })) || []
@@ -150,7 +151,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(medicalRules)
+    return NextResponse.json({rules: medicalRules[0]}, { status: 200 })
   } catch (error) {
     console.error('Error fetching medical rules:', error)
     return NextResponse.json(
