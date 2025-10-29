@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import type { ClaimRecord, ClaimsParseResult } from './types';
+import { Claim as ClaimRecord } from '@/types/claim';
 
 
 /**
@@ -13,7 +13,7 @@ import type { ClaimRecord, ClaimsParseResult } from './types';
  * @param file - The Excel (.xlsx) file uploaded by the user
  * @returns A structured array of claim objects ready for rule validation
  */
-export const parseClaimsExcel = async (file: File): Promise<ClaimsParseResult> => {
+export const parseClaimsExcel = async (file: File) => {
   try {
     const data = await file.arrayBuffer();
     const workbook = XLSX.read(data, { type: "array" });
@@ -28,18 +28,18 @@ export const parseClaimsExcel = async (file: File): Promise<ClaimsParseResult> =
     const headers = Object.keys(jsonData[0]);
 
     // Normalize and clean claims
-    const claims: ClaimRecord[] = jsonData.map((row) => ({
-      claim_id: sanitizeString(row.claim_id || row.Claim_ID || row["Claim ID"]),
-      encounter_type: sanitizeString(row.encounter_type || row.Encounter_Type || row["Encounter Type"]),
-      service_code: sanitizeString(row.service_code || row.Service_Code || row["Service Code"]),
-      service_date: normalizeDate(row.service_date || row.Service_Date || row["Service Date"]),
-      diagnosis_codes: sanitizeString(row.diagnosis_codes || row.diagnosis_code || row.Diagnosis_Codes || row.Diagnosis_Code || row["Diagnosis Codes"] || row["Diagnosis Code"]),
-      facility_id: sanitizeString(row.facility_id || row.Facility_ID || row["Facility ID"]),
-      paid_amount_aed: parseFloat(row.paid_amount_aed || row.Paid_Amount_AED || row["Paid Amount (AED)"] || 0),
-      member_id: sanitizeString(row.member_id || row.Member_ID || row["Member ID"]),
-      national_id: sanitizeString(row.national_id || row.National_ID || row["National ID"]),
-      unique_id: sanitizeString(row.unique_id || row.Unique_ID || row["Unique ID"]),
-      approval_number: sanitizeString(row.approval_number || row.Approval_Number || row["Approval Number"]),
+    const claims: Omit<ClaimRecord, "id | status | createdAt | updatedAt | ownerId">[] = jsonData.map((row) => ({
+      claimId: sanitizeString(row.claim_id || row.Claim_ID || row["Claim ID"]),
+      encounterType: sanitizeString(row.encounter_type || row.Encounter_Type || row["Encounter Type"]),
+      serviceCode: sanitizeString(row.service_code || row.Service_Code || row["Service Code"]),
+      serviceDate: normalizeDate(row.service_date || row.Service_Date || row["Service Date"]),
+      diagnosisCodes: sanitizeString(row.diagnosis_codes || row.diagnosis_code || row.Diagnosis_Codes || row.Diagnosis_Code || row["Diagnosis Codes"] || row["Diagnosis Code"]),
+      facilityId: sanitizeString(row.facility_id || row.Facility_ID || row["Facility ID"]),
+      paidAmount: parseFloat(row.paid_amount_aed || row.Paid_Amount_AED || row["Paid Amount (AED)"] || 0),
+      memberId: sanitizeString(row.member_id || row.Member_ID || row["Member ID"]),
+      nationalId: sanitizeString(row.national_id || row.National_ID || row["National ID"]),
+      uniqueId: sanitizeString(row.unique_id || row.Unique_ID || row["Unique ID"]),
+      approvalNumber: sanitizeString(row.approval_number || row.Approval_Number || row["Approval Number"]),
       ...row // keep extras for completeness
     }));
 

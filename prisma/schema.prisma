@@ -49,130 +49,250 @@ model User {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   claims          Claim[]
-  medicalRuleSets MedicalRuleSet[]
-  technicalRuleSets TechnicalRuleSet[]
+  ruleSets      RuleSet[]  // User can have multiple rule sets
 }
 
 model Claim {
   id                 String      @id @default(cuid())
-  claim_id           String      @unique
-  encounter_type     String
-  service_date       DateTime
-  national_id        String
-  member_id          String
-  facility_id        String
-  unique_id          String
-  diagnosis_codes    String
-  service_code       String
-  paid_amount_aed    Float
-  approval_number    String?
-  status             String
-  error_type         String
-  error_explanation  String?
-  recommended_action String?
-  raw_errors         String[]
-  owner              User        @relation(fields: [ownerId], references: [id])
-  ownerId            String
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  claimId  String     @unique
+  patientId    String     @map("patient_id")
+  memberId     String     @map("member_id")
+  facilityId   String     @map("facility_id")
+  nationalId   String     @map("national_id")
+  uniqueId     String
+  serviceCode  String     @map("service_code")
+  diagnosisCodes String[] @map("diagnosis_codes")
+  paidAmount   Float      @map("paid_amount")
+  encounterType String    @map("encounter_type")
+  claimDate    DateTime   @map("claim_date")
+  status       ClaimStatus @default(PENDING)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  ownerId      String     @map("owner_id")
+  serviceDate       DateTime
+  approvalNumber    String?
+  errorType         String
+  errorExplanation  String?
+  recommendedAction String?
+  rawErrors         String[]
+  // Relations
+  user User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // Validation results (stored as JSON)
+  validationResult Json?
+
+  @@map("claims")
 }
 
-model MedicalRuleSet {
-  id             String         @id @default(cuid())
-  name           String
-  isActive       Boolean        @default(false)
-  rawText        String
-  createdAt      DateTime       @default(now())
-  owner          User           @relation(fields: [ownerId], references: [id])
-  ownerId        String
-  encounterRules EncounterRule[]
-  facilityRules  FacilityRule[]
-  diagnosisRules DiagnosisRule[]
-  exclusionRules ExclusionRule[]
+enum ClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REQUIRES_APPROVAL
 }
 
-model EncounterRule {
-  id              String         @id @default(cuid())
-  ruleSet         MedicalRuleSet @relation(fields: [ruleSetId], references: [id])
-  ruleSetId       String
-  encounterType   String
-  services        String[]
+model RuleSet {
+  id        String   @id @default(cuid())
+  title     String
+  framing   String?
+  ownerId   String
+  type      RuleType
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+
+  // Relations
+  user          User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // Technical Rules
+  technicalRule   TechnicalRule?
+  // Medical Rules
+  medicalRule     MedicalRule?
+
+  @@map("rule_sets")
 }
 
-model FacilityRule {
-  id           String         @id @default(cuid())
-  ruleSet      MedicalRuleSet @relation(fields: [ruleSetId], references: [id])
-  ruleSetId    String
-  facilityType String
-  services     String[]
+enum RuleType {
+  TECHNICAL
+  MEDICAL
 }
 
-model DiagnosisRule {
-  id              String         @id @default(cuid())
-  ruleSet         MedicalRuleSet @relation(fields: [ruleSetId], references: [id])
-  ruleSetId       String
-  code            String
-  diagnosis       String
-  requiredService String
+// Technical Rules
+model TechnicalRule {
+  id        String   @id @default(cuid())
+  ruleSetId String   @unique
+  ruleSet   RuleSet  @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
+
+  // Services requiring approval
+  serviceApprovals ServiceApproval[]
+
+  // Diagnosis codes requiring approval
+  diagnosisApprovals DiagnosisApproval[]
+
+  // Paid amount threshold
+  paidAmountThreshold PaidAmountThreshold?
+
+  // ID formatting rules
+  idFormattingRules IdFormattingRules?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("technical_rules")
 }
 
-model ExclusionRule {
-  id        String         @id @default(cuid())
-  ruleSet   MedicalRuleSet @relation(fields: [ruleSetId], references: [id])
-  ruleSetId String
-  codeA     String
-  codeB     String
-  rule      String
-}
-
-model TechnicalRuleSet {
-  id                 String               @id @default(cuid())
-  name               String
-  isActive           Boolean              @default(false)
-  rawText            String
-  createdAt          DateTime             @default(now())
-  owner              User                 @relation(fields: [ownerId], references: [id])
-  ownerId            String
-  serviceApprovals   ServiceApprovalRule[]
-  diagnosisApprovals DiagnosisApprovalRule[]
-  thresholdRules     ThresholdRule[]
-  idFormatRules      IdFormatRule[]
-}
-
-model ServiceApprovalRule {
-  id                String           @id @default(cuid())
-  ruleSet           TechnicalRuleSet @relation(fields: [ruleSetId], references: [id])
-  ruleSetId         String
-  serviceCode       String
+model ServiceApproval {
+  id              String   @id @default(cuid())
+  technicalRuleId String
+  technicalRule   TechnicalRule @relation(fields: [technicalRuleId], references: [id], onDelete: Cascade)
+  
+  serviceID         String
   description       String
   approvalRequired  Boolean
+
+  createdAt DateTime @default(now())
+  
+  @@map("service_approvals")
 }
 
-model DiagnosisApprovalRule {
-  id                String           @id @default(cuid())
-  ruleSet           TechnicalRuleSet @relation(fields: [ruleSetId], references: [id])
-  ruleSetId         String
-  diagnosisCode     String
-  diagnosis         String
-  approvalRequired  Boolean
+model DiagnosisApproval {
+  id              String   @id @default(cuid())
+  technicalRuleId String
+  technicalRule   TechnicalRule @relation(fields: [technicalRuleId], references: [id], onDelete: Cascade)
+  
+  code             String
+  diagnosis        String
+  approvalRequired Boolean
+
+  createdAt DateTime @default(now())
+  
+  @@map("diagnosis_approvals")
 }
 
-model ThresholdRule {
-  id        String           @id @default(cuid())
-  ruleSet   TechnicalRuleSet @relation(fields: [ruleSetId], references: [id])
-  ruleSetId String
-  field     String
-  currency  String
-  amount    Float
-  condition String
-}
-
-model IdFormatRule {
-  id          String           @id @default(cuid())
-  ruleSet     TechnicalRuleSet @relation(fields: [ruleSetId], references: [id])
-  ruleSetId   String
+model PaidAmountThreshold {
+  id              String   @id @default(cuid())
+  technicalRuleId String   @unique
+  technicalRule   TechnicalRule @relation(fields: [technicalRuleId], references: [id], onDelete: Cascade)
+  
+  threshold   Float
   description String
-  pattern     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("paid_amount_thresholds")
+}
+
+model IdFormattingRules {
+  id              String   @id @default(cuid())
+  technicalRuleId String   @unique
+  technicalRule   TechnicalRule @relation(fields: [technicalRuleId], references: [id], onDelete: Cascade)
+  
+  idFormat          String
+  uniqueIdStructure String
+  requirements      String[] // Stored as JSON array
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("id_formatting_rules")
+}
+
+// Medical Rules
+model MedicalRule {
+  id        String   @id @default(cuid())
+  ruleSetId String   @unique
+  ruleSet   RuleSet  @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
+
+  // Encounter types
+  encounterTypes EncounterType[]
+
+  // Facility types and their allowed services
+  facilityTypes FacilityType[]
+
+  // Facility registry
+  facilityRegistry FacilityRegistry[]
+
+  // Diagnosis requirements for services
+  diagnosisRequirements DiagnosisRequirement[]
+
+  // Mutually exclusive diagnoses
+  mutuallyExclusiveDiagnoses MutuallyExclusiveDiagnosis[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("medical_rules")
+}
+
+model EncounterType {
+  id           String   @id @default(cuid())
+  medicalRuleId String
+  medicalRule   MedicalRule @relation(fields: [medicalRuleId], references: [id], onDelete: Cascade)
+  
+  code        String
+  description String
+
+  createdAt DateTime @default(now())
+  
+  @@map("encounter_types")
+}
+
+model FacilityType {
+  id           String   @id @default(cuid())
+  medicalRuleId String
+  medicalRule   MedicalRule @relation(fields: [medicalRuleId], references: [id], onDelete: Cascade)
+  
+  facilityType    String
+  allowedServices String[] // Stored as JSON array of service IDs
+
+  createdAt DateTime @default(now())
+  
+  @@map("facility_types")
+}
+
+model FacilityRegistry {
+  id           String   @id @default(cuid())
+  medicalRuleId String
+  medicalRule   MedicalRule @relation(fields: [medicalRuleId], references: [id], onDelete: Cascade)
+  
+  facilityId String
+  type       String
+
+  createdAt DateTime @default(now())
+  
+  @@unique([medicalRuleId, facilityId])
+  @@map("facility_registry")
+}
+
+model DiagnosisRequirement {
+  id           String   @id @default(cuid())
+  medicalRuleId String
+  medicalRule   MedicalRule @relation(fields: [medicalRuleId], references: [id], onDelete: Cascade)
+  
+  diagnosisCode String
+  diagnosisName String
+  serviceID     String
+  serviceName   String
+
+  createdAt DateTime @default(now())
+  
+  @@map("diagnosis_requirements")
+}
+
+model MutuallyExclusiveDiagnosis {
+  id           String   @id @default(cuid())
+  medicalRuleId String
+  medicalRule   MedicalRule @relation(fields: [medicalRuleId], references: [id], onDelete: Cascade)
+  
+  diagnosis1Code String
+  diagnosis1Name String
+  diagnosis2Code String
+  diagnosis2Name String
+
+  createdAt DateTime @default(now())
+  
+  @@map("mutually_exclusive_diagnoses")
 }
 
 model AuditLog {

@@ -1,180 +1,143 @@
-import pdfToText from "react-pdftotext";
+import { TechnicalRule } from "@/types/technical-rule";
 
-/**
- * ========================
- * TYPE DEFINITIONS
- * ========================
- */
-
-export interface ServiceApprovalRule {
-  serviceCode: string;
-  description: string;
-  approvalRequired: boolean;
-}
-
-export interface DiagnosisApprovalRule {
-  diagnosisCode: string;
-  diagnosis: string;
-  approvalRequired: boolean;
-}
-
-export interface ThresholdRule {
-  field: string;
-  currency: string;
-  amount: number;
-  condition: string;
-}
-
-export interface IdFormatRule {
-  description: string;
-  pattern?: string;
-}
-
-export interface TechnicalRuleSet {
-  rawText: string;
-  sections: Record<string, string>;
-  structured: {
-    serviceApprovals: ServiceApprovalRule[];
-    diagnosisApprovals: DiagnosisApprovalRule[];
-    thresholdRules: ThresholdRule[];
-    idFormatRules: IdFormatRule[];
-  };
-}
-
-/**
- * ========================
- * MAIN PARSER FUNCTION
- * ========================
- */
-
-export const parseTechnicalRulesFromPdf = async (file: File): Promise<TechnicalRuleSet> => {
-  try {
-    const rawText = await pdfToText(file);
-    const cleanText = rawText.replace(/\r?\n|\r/g, "\n").trim();
-
-    // Split into 1), 2), 3), 4) sections
-    const sections = splitSections(cleanText);
-
-    const serviceApprovals = parseServiceApprovalRules(sections["1"] || "");
-    const diagnosisApprovals = parseDiagnosisApprovalRules(sections["2"] || "");
-    const thresholdRules = parseThresholdRules(sections["3"] || "");
-    const idFormatRules = parseIdFormatRules(sections["4"] || "");
-
-    return {
-      rawText: cleanText,
-      sections,
-      structured: {
-        serviceApprovals,
-        diagnosisApprovals,
-        thresholdRules,
-        idFormatRules,
+ export const parseTechnicalRules = (text: string) => {
+    const data: Omit<TechnicalRule, 'id' | 'isActive' | 'ownerId' | 'ruleSetId'> = {
+      title: '',
+      framing: '',
+      type: 'TECHNICAL',
+      serviceApprovals: [],
+      diagnosisApprovals: [],
+      paidAmountThreshold: {
+        threshold: 0,
+        description: ''
       },
+      idFormattingRules: {
+        idFormat: '',
+        uniqueIdStructure: '',
+        requirements: []
+      }
     };
-  } catch (error) {
-    console.error("Error parsing technical PDF:", error);
-    throw new Error("Failed to parse and extract technical rules from PDF.");
-  }
-};
 
-/**
- * ========================
- * SECTION SPLITTER
- * ========================
- */
-
-function splitSections(text: string): Record<string, string> {
-  const sections: Record<string, string> = {};
-  const matches = text.split(/(?=\n?1\)|\n?2\)|\n?3\)|\n?4\))/g);
-
-  matches.forEach((chunk) => {
-    const headerMatch = chunk.match(/^(\d)\)/);
-    if (headerMatch) {
-      const key = headerMatch[1];
-      sections[key] = chunk.trim();
+    // Extract title
+    const titleMatch = text.match(/Technical Adjudication & Submission Guide[^\n]*/i);
+    if (titleMatch) {
+      data.title = titleMatch[0].trim();
     }
-  });
 
-  return sections;
-}
-
-/**
- * ========================
- * PARSERS
- * ========================
- */
-
-function parseServiceApprovalRules(text: string): ServiceApprovalRule[] {
-  const lines = text.split("\n").map((l) => l.trim());
-  const rules: ServiceApprovalRule[] = [];
-
-  lines.forEach((line) => {
-    const match = line.match(/^(SRV\d{4})\s+(.+?)\s+(YES|NO)$/i);
-    if (match) {
-      const [, serviceCode, description, approval] = match;
-      rules.push({
-        serviceCode,
-        description: description.trim(),
-        approvalRequired: approval.toUpperCase() === "YES",
-      });
+    // Extract framing text
+    const framingMatch = text.match(/Framing:(.*?)(?=1\)|Services Requiring)/is);
+    if (framingMatch) {
+      data.framing = framingMatch[1].trim().replace(/\s+/g, ' ');
     }
-  });
 
-  return rules;
-}
-
-function parseDiagnosisApprovalRules(text: string): DiagnosisApprovalRule[] {
-  const lines = text.split("\n").map((l) => l.trim());
-  const rules: DiagnosisApprovalRule[] = [];
-
-  lines.forEach((line) => {
-    const match = line.match(/^([A-Z0-9.]+)\s+(.+?)\s+(YES|NO)$/i);
-    if (match) {
-      const [, diagnosisCode, diagnosis, approval] = match;
-      rules.push({
-        diagnosisCode,
-        diagnosis: diagnosis.trim(),
-        approvalRequired: approval.toUpperCase() === "YES",
-      });
+    // Section 1: Services Requiring Prior Approval
+    const section1Match = text.match(/1\)\s*Services Requiring Prior Approval(.*?)(?=2\)|Diagnosis Codes Requiring)/is);
+    if (section1Match) {
+      const content = section1Match[1];
+      
+      // Extract table data - match service codes with descriptions and approval status
+      const serviceMatches = content.matchAll(/(?:SRV)?(\d{4})\s+([^\n\t]+?)(?:\s+|\t+)(YES|NO)/gi);
+      
+      for (const match of serviceMatches) {
+        const serviceID = 'SRV' + match[1];
+        const description = match[2].trim();
+        const approvalRequired = match[3].toUpperCase() === 'YES';
+        
+        if (description && description.length > 2) {
+          data.serviceApprovals.push({
+            serviceID,
+            description,
+            approvalRequired
+          });
+        }
+      }
     }
-  });
 
-  return rules;
-}
+    // Section 2: Diagnosis Codes Requiring Approval
+    const section2Match = text.match(/2\)\s*Diagnosis Codes Requiring Approval(.*?)(?=3\)|Paid Amount Threshold)/is);
+    if (section2Match) {
+      const content = section2Match[1];
+      
+      // Extract diagnosis codes with names and approval status
+      const diagnosisMatches = content.matchAll(/([A-Z]\d{2,3}(?:\.\d+)?)\s+([^\n\t]+?)(?:\s+|\t+)(YES|NO)/gi);
+      
+      for (const match of diagnosisMatches) {
+        const code = match[1];
+        const diagnosis = match[2].trim();
+        const approvalRequired = match[3].toUpperCase() === 'YES';
+        
+        if (diagnosis && diagnosis.length > 2) {
+          data.diagnosisApprovals.push({
+            code,
+            diagnosis,
+            approvalRequired
+          });
+        }
+      }
+    }
 
-function parseThresholdRules(text: string): ThresholdRule[] {
-  const rules: ThresholdRule[] = [];
-  const match = text.match(/paid_amount_aed\s*>\s*AED\s*(\d+)/i);
+    // Section 3: Paid Amount Threshold
+    const section3Match = text.match(/3\)\s*Paid Amount Threshold(.*?)(?=4\)|ID & Unique ID Formatting|$)/is);
+    if (section3Match) {
+      const content = section3Match[1];
+      
+      // Extract threshold amount - look for AED followed by number
+      const thresholdMatch = content.match(/AED\s*(\d+)/i);
+      if (thresholdMatch) {
+        data.paidAmountThreshold.threshold = parseInt(thresholdMatch[1]);
+      }
+      
+      // Extract the main rule description (first sentence)
+      const mainRuleMatch = content.match(/Any claim with[^.]+\./i);
+      if (mainRuleMatch) {
+        data.paidAmountThreshold.description = mainRuleMatch[0].trim();
+      }
+      
+      // If no main rule found, try to get full content up to next section
+      if (!data.paidAmountThreshold.description) {
+        const fullDescMatch = content.match(/Any claim with.*?(?=\n\n|4\)|$)/is);
+        if (fullDescMatch) {
+          data.paidAmountThreshold.description = fullDescMatch[0].trim().replace(/\s+/g, ' ');
+        }
+      }
+    }
 
-  if (match) {
-    const amount = parseFloat(match[1]);
-    rules.push({
-      field: "paid_amount_aed",
-      currency: "AED",
-      amount,
-      condition: `> ${amount}`,
-    });
-  }
+    // Section 4: ID & Unique ID Formatting
+    const section4Match = text.match(/4\)\s*ID & Unique ID Formatting(.*?)$/is);
+    if (section4Match) {
+      const content = section4Match[1];
+      
+      // Extract ID format requirement
+      const idFormatMatch = content.match(/All IDs must be\s+([^.]+)/i);
+      if (idFormatMatch) {
+        data.idFormattingRules.idFormat = idFormatMatch[1].trim();
+      }
+      
+      // Extract unique_id structure with more flexible pattern
+      const structureMatch = content.match(/unique[_\s]id structure[:\s]+([^.]+?)(?:\.|•|\n|$)/i);
+      if (structureMatch) {
+        data.idFormattingRules.uniqueIdStructure = structureMatch[1].trim();
+      }
+      
+      // Extract all bullet points as requirements
+      const requirementMatches = content.matchAll(/•\s*([^\n•]+)/g);
+      for (const match of requirementMatches) {
+        const requirement = match[1].trim();
+        if (requirement.length > 5) {
+          data.idFormattingRules.requirements.push(requirement);
+        }
+      }
+      
+      // If requirements array is empty, try to extract from the combined text
+      if (data.idFormattingRules.requirements.length === 0) {
+        // Try to extract from section 3 if it was combined
+        const combinedIdRules = text.match(/All IDs must be UPPERCASE.*?(?=\n\n|$)/is);
+        if (combinedIdRules) {
+          const rules = combinedIdRules[0].split(/[.•]/).filter(r => r.trim().length > 10);
+          data.idFormattingRules.requirements = rules.map(r => r.trim());
+        }
+      }
+    }
 
-  return rules;
-}
-
-function parseIdFormatRules(text: string): IdFormatRule[] {
-  const rules: IdFormatRule[] = [];
-
-  if (/UPPERCASE/.test(text)) {
-    rules.push({
-      description: "All IDs must be UPPERCASE alphanumeric (A–Z, 0–9).",
-      pattern: "^[A-Z0-9]+$",
-    });
-  }
-
-  if (/unique_id structure/i.test(text)) {
-    rules.push({
-      description:
-        "unique_id structure: first4(National ID) – middle4(Member ID) – last4(Facility ID). Segments must be hyphen-separated.",
-      pattern: "^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$",
-    });
-  }
-
-  return rules;
-}
+    return data;
+  };

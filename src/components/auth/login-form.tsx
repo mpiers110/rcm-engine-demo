@@ -32,8 +32,7 @@ export function LoginForm() {
       }
 
       // On successful login, redirect to the dashboard.
-      router.push('/');
-      router.refresh(); // Refresh to ensure session state is updated.
+      router.push('/dashboard');
 
     } catch (error: any) {
       toast({

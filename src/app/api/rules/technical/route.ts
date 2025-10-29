@@ -1,7 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { parseTechnicalRulesFromPdf } from '@/lib/technical-parser';
 import { addToAuditLog } from '@/lib/audit-log';
 import { prisma } from '@/lib/prisma';
 
@@ -13,54 +12,85 @@ export async function POST(request: Request) {
   const userId = session.user.id;
 
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
+    const body = await request.json()
+    
+    const {
+      title,
+      framing,
+      servicesRequiringApproval,
+      diagnosisCodesRequiringApproval,
+      paidAmountThreshold,
+      idFormattingRules
+    } = body
 
-    if (!file) {
-      return NextResponse.json({ success: false, error: 'No file uploaded.' }, { status: 400 });
-    }
-
-    const rules = await parseTechnicalRulesFromPdf(file);
-    const ruleSetName = file.name;
-
-    await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       // Deactivate all other rule sets for this user
-      await tx.technicalRuleSet.updateMany({
-        where: { ownerId: userId, isActive: true },
+      await tx.ruleSet.updateMany({
+        where: { ownerId: userId, isActive: true, type: 'TECHNICAL' },
         data: { isActive: false },
       });
 
       // Create the new active rule set
-      await tx.technicalRuleSet.create({
-        data: {
-          name: ruleSetName,
-          isActive: true,
-          rawText: rules.rawText,
-          ownerId: userId,
-          serviceApprovals: {
-            create: rules.structured.serviceApprovals
-          },
-          diagnosisApprovals: {
-            create: rules.structured.diagnosisApprovals
-          },
-          thresholdRules: {
-            create: rules.structured.thresholdRules
-          },
-          idFormatRules: {
-            create: rules.structured.idFormatRules
+      const newRuleSet = await tx.ruleSet.create({
+      data: {
+        title,
+        framing,
+        ownerId: userId,
+        type: 'TECHNICAL',
+        technicalRule: {
+          create: {
+            serviceApprovals: {
+              create: servicesRequiringApproval.map((service: any) => ({
+                serviceID: service.serviceID,
+                description: service.description,
+                approvalRequired: service.approvalRequired
+              }))
+            },
+            diagnosisApprovals: {
+              create: diagnosisCodesRequiringApproval.map((diagnosis: any) => ({
+                code: diagnosis.code,
+                diagnosis: diagnosis.diagnosis,
+                approvalRequired: diagnosis.approvalRequired
+              }))
+            },
+            paidAmountThreshold: {
+              create: {
+                threshold: paidAmountThreshold.threshold,
+                description: paidAmountThreshold.description
+              }
+            },
+            idFormattingRules: {
+              create: {
+                idFormat: idFormattingRules.idFormat,
+                uniqueIdStructure: idFormattingRules.uniqueIdStructure,
+                requirements: idFormattingRules.requirements
+              }
+            }
           }
-        },
-      });
+        }
+      },
+      include: {
+        technicalRule: {
+          include: {
+            serviceApprovals: true,
+            diagnosisApprovals: true,
+            paidAmountThreshold: true,
+            idFormattingRules: true
+          }
+        }
+      }
+    })
+      return newRuleSet;
     });
 
     addToAuditLog({
       action: 'Technical Rules Ingested',
       timestamp: new Date().toISOString(),
-      details: `Successfully parsed and saved technical rules from ${ruleSetName}. The rules are now active.`,
+      details: `Successfully parsed and saved technical rules from ${title}. The rules are now active.`,
       userId,
     });
 
-    return NextResponse.json({ success: true, message: 'Technical rules saved.', data: rules });
+    return NextResponse.json({ success: true, message: 'Technical rules saved.', rule: result.id }, { status: 200 });
 
   } catch (error: any) {
     console.error('Technical rules ingestion failed:', error);
@@ -71,5 +101,48 @@ export async function POST(request: Request) {
       userId,
     });
     return NextResponse.json({ success: false, error: error.message || 'Failed to process file.' }, { status: 500 });
+  }
+}
+
+// GET - Get all technical rules for an owner
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const ownerId = searchParams.get('ownerId')
+
+    if (!ownerId) {
+      return NextResponse.json(
+        { error: 'ownerId is required' },
+        { status: 400 }
+      )
+    }
+
+    const technicalRules = await prisma.ruleSet.findMany({
+      where: {
+        ownerId,
+        type: 'TECHNICAL'
+      },
+      include: {
+        technicalRule: {
+          include: {
+            serviceApprovals: true,
+            diagnosisApprovals: true,
+            paidAmountThreshold: true,
+            idFormattingRules: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    })
+
+    return NextResponse.json(technicalRules)
+  } catch (error) {
+    console.error('Error fetching technical rules:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch technical rules' },
+      { status: 500 }
+    )
   }
 }

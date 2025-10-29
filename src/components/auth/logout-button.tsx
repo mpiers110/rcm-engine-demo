@@ -1,10 +1,4 @@
 'use client';
-
-// This component provides a button to log the user out.
-// It is used in the PageHeader.
-// This is currently NOT active. To enable it, uncomment its usage
-// in the PageHeader component.
-
 import { signOut, useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';

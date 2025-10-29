@@ -41,7 +41,7 @@ export interface AuditLogEntry {
 export interface ClaimRecord {
   claim_id: string;
   encounter_type: string;
-  service_code: string;
+  serviceCode: string;
   service_date: string;
   diagnosis_codes: string;
   facility_id: string;

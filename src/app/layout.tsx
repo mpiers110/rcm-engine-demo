@@ -7,12 +7,13 @@ export const metadata: Metadata = {
   title: 'ClaimCheck Pro',
   description: 'A Mini RCM Validation Engine',
 };
-
-export default function RootLayout({
+export default async function DashboardLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
